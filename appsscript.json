@@ -1,7 +1,37 @@
-{
-  "timeZone": "America/New_York",
-  "dependencies": {
-  },
-  "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8"
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('カウント')
+      .addItem('値をカウント', 'countUniqueValues')
+      .addToUi();
+}
+
+function countUniqueValues() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  // AE7からAF500までをクリア
+  sheet.getRange("AE7:AF500").clearContent();
+  
+  var range = sheet.getRange("V7:V"); // X列の7行目以降を取得
+  var values = range.getValues();
+  var uniqueValues = {};
+  
+  for (var i = 0; i < values.length; i++) {
+    var value = values[i][0];
+    if (value !== "" && value !== "#N/A") { // 空白と#N/Aはカウントしない
+      if (!uniqueValues[value]) {
+        uniqueValues[value] = 1;
+      } else {
+        uniqueValues[value]++;
+      }
+    }
+  }
+  
+  var output = [];
+  for (var key in uniqueValues) {
+    output.push([key, uniqueValues[key]]);
+  }
+  
+  // 出力先をAE7とAF7に変更
+  sheet.getRange(7, 29, output.length, 2).setValues(output); // AE列が31
+  sheet.autoResizeColumns(29, 2); // AE列とAF列の幅を自動調整
 }
