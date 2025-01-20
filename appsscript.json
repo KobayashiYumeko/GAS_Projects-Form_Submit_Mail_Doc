@@ -1,37 +1,69 @@
-function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu('カウント')
-      .addItem('値をカウント', 'countUniqueValues')
-      .addToUi();
+function onFormSubmit(e) {
+  // Google フォームから送信された回答を取得
+  const guideName = e.namedValues["ガイド名"][0];
+  const email = e.namedValues["メールアドレス"][0];
+  const tourDate = e.namedValues["ツアー催行日"][0];
+  const tourStartTime = e.namedValues["ツアー開始時間"][0];
+  const tourType = e.namedValues["依頼するツアー種類"][0];
+  const status = e.namedValues["正式または打診"][0];
+
+  // テンプレート名をスプレッドシートから取得
+  const documentName = getTemplateName(status, tourType);
+  if (!documentName) {
+    Logger.log(`テンプレートが見つかりません: ${status}, ${tourType}`);
+    GmailApp.sendEmail("admin@example.com", "テンプレートエラー", `テンプレートが見つかりません: ${status}, ${tourType}`);
+    return;
+  }
+
+  // テンプレートフォルダ内からドキュメントを検索
+  const templateFolderId = "テンプレートフォルダIDを入力"; // テンプレートが格納されたフォルダのID
+  const folder = DriveApp.getFolderById(templateFolderId);
+  const files = folder.getFilesByName(documentName);
+
+  if (!files.hasNext()) {
+    Logger.log(`テンプレートが見つかりません: ${documentName}`);
+    GmailApp.sendEmail("admin@example.com", "テンプレートエラー", `テンプレートが見つかりません: ${documentName}`);
+    return;
+  }
+
+  const templateFile = files.next();
+  const templateDoc = DocumentApp.openById(templateFile.getId());
+  const templateBody = templateDoc.getBody();
+
+  // プレースホルダーを置換
+  const placeholders = {
+    "{ガイド名}": guideName,
+    "{メールアドレス}": email,
+    "{ツアー催行日}": tourDate,
+    "{ツアー開始時間}": tourStartTime,
+    "{依頼するツアー種類}": tourType,
+    "{正式または打診}": status,
+  };
+
+  let emailBody = templateBody.getText();
+  for (const placeholder in placeholders) {
+    emailBody = emailBody.replace(new RegExp(placeholder, 'g'), placeholders[placeholder]);
+  }
+
+  // メールの件名を設定 (テンプレートドキュメントの一行目を使用)
+  const subject = templateBody.getText().split('\n')[0];
+
+  // メールを送信 (CCにstaff@japanwondertravel.comを追加)
+  GmailApp.sendEmail(email, subject, emailBody, {
+    cc: "staff@japanwondertravel.com"
+  });
+
+  Logger.log(`メールを送信しました: ${email}`);
 }
 
-function countUniqueValues() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  
-  // AE7からAF500までをクリア
-  sheet.getRange("AE7:AF500").clearContent();
-  
-  var range = sheet.getRange("V7:V"); // X列の7行目以降を取得
-  var values = range.getValues();
-  var uniqueValues = {};
-  
-  for (var i = 0; i < values.length; i++) {
-    var value = values[i][0];
-    if (value !== "" && value !== "#N/A") { // 空白と#N/Aはカウントしない
-      if (!uniqueValues[value]) {
-        uniqueValues[value] = 1;
-      } else {
-        uniqueValues[value]++;
-      }
+function getTemplateName(status, tourType) {
+  const sheet = SpreadsheetApp.openById("スプレッドシートIDを入力").getSheetByName("テンプレート一覧");
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) { // 1行目はヘッダー
+    if (data[i][0] === status && data[i][1] === tourType) {
+      return data[i][2]; // テンプレート名
     }
   }
-  
-  var output = [];
-  for (var key in uniqueValues) {
-    output.push([key, uniqueValues[key]]);
-  }
-  
-  // 出力先をAE7とAF7に変更
-  sheet.getRange(7, 29, output.length, 2).setValues(output); // AE列が31
-  sheet.autoResizeColumns(29, 2); // AE列とAF列の幅を自動調整
+  return null; // 見つからない場合
 }
